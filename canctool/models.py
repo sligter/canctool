@@ -42,6 +42,7 @@ class ChatCompletionRequest(BaseModel):
     max_tokens: Optional[int] = 1000
     tools: Optional[List[Tool]] = None
     tool_choice: Optional[str] = "auto"
+    stream: Optional[bool] = False
 
 
 class ToolCall(BaseModel):
@@ -69,3 +70,17 @@ class ChatCompletionResponse(BaseModel):
     model: str
     choices: List[Choice]
     usage: Usage
+
+
+class StreamChoice(BaseModel):
+    index: int = 0
+    delta: ChatMessage
+    finish_reason: Optional[str] = None
+
+
+class ChatCompletionStreamResponse(BaseModel):
+    id: str
+    object: str = "chat.completion.chunk"
+    created: int
+    model: str
+    choices: List[StreamChoice]

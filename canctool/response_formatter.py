@@ -1,8 +1,12 @@
 import json
 import uuid
+import time
 from datetime import datetime
 from typing import Dict, Any, Optional
-from .models import ChatCompletionRequest, ChatCompletionResponse, ToolCall, Choice, Usage, ChatMessage
+from .models import (
+    ChatCompletionRequest, ChatCompletionResponse, ChatCompletionStreamResponse,
+    ToolCall, Choice, Usage, ChatMessage, StreamChoice
+)
 from .prompt_engineering import PromptEngineeringService
 
 
@@ -66,7 +70,7 @@ class ResponseFormatter:
         return ChatCompletionResponse(
             id=f"chatcmpl-{str(uuid.uuid4()).replace('-', '')[:24]}",
             object="chat.completion",
-            created=int(datetime.now().timestamp()),
+            created=int(time.time()),
             model=request.model,
             choices=[choice],
             usage=usage
@@ -93,3 +97,48 @@ class ResponseFormatter:
                                   prompt_tokens: int = 0,
                                   completion_tokens: int = 0) -> ChatCompletionResponse:
         return self.format_unified_response(request, llm_response, prompt_tokens, completion_tokens, True)
+
+    def format_stream_chunk(self, request: ChatCompletionRequest, content: str,
+                           finish_reason: Optional[str] = None) -> ChatCompletionStreamResponse:
+        """Format streaming response chunk"""
+        response_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
+
+        # Create delta message
+        delta = ChatMessage(role="assistant", content=content)
+
+        choice = StreamChoice(
+            index=0,
+            delta=delta,
+            finish_reason=finish_reason
+        )
+
+        response = ChatCompletionStreamResponse(
+            id=response_id,
+            created=int(time.time()),
+            model=request.model,
+            choices=[choice]
+        )
+
+        return response
+
+    def format_stream_end_chunk(self, request: ChatCompletionRequest) -> ChatCompletionStreamResponse:
+        """Format final streaming chunk"""
+        response_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
+
+        # Empty delta for final chunk
+        delta = ChatMessage(role="assistant", content="")
+
+        choice = StreamChoice(
+            index=0,
+            delta=delta,
+            finish_reason="stop"
+        )
+
+        response = ChatCompletionStreamResponse(
+            id=response_id,
+            created=int(time.time()),
+            model=request.model,
+            choices=[choice]
+        )
+
+        return response

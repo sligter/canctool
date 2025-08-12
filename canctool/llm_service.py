@@ -35,7 +35,7 @@ class LLMService:
             )
             logger.info(f"Initialized provider client: {provider_name} -> {provider.base_url}")
     
-    async def call_llm(self, prompt: str, model: str = "default") -> str:
+    async def call_llm(self, prompt: str, model: str = "default", stream: bool = False):
         """
         调用LLM服务，返回原始文本响应
         支持多提供商和多模型
@@ -67,9 +67,14 @@ class LLMService:
                     logger.info(f"Retrying LLM API call (attempt {attempt + 1}/{self.max_retries})")
 
                 # Try OpenAI compatible format
-                response = await self._call_openai_compatible(prompt, model, headers, client)
-                if response:
-                    return response
+                if stream:
+                    response = await self._call_openai_compatible_stream(prompt, model, headers, client)
+                    if response:
+                        return response
+                else:
+                    response = await self._call_openai_compatible(prompt, model, headers, client)
+                    if response:
+                        return response
 
                 if attempt < self.max_retries - 1:
                     logger.warning(f"API call failed, will retry (attempt {attempt + 1}/{self.max_retries})")
@@ -148,6 +153,59 @@ class LLMService:
                 logger.debug(f"Error traceback: {traceback.format_exc()}")
 
         return None
+
+    async def _call_openai_compatible_stream(self, prompt: str, model: str, headers: dict, client: httpx.Client):
+        """Try OpenAI compatible format with streaming"""
+        try:
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "max_tokens": 1000,
+                "temperature": 0.7,
+                "stream": True
+            }
+
+            logger.debug(f"Calling OpenAI compatible streaming API, prompt length: {len(prompt)}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(f"Request payload: {json.dumps(payload, ensure_ascii=False, indent=2)}")
+
+            # 使用stream方式发送请求并处理响应
+            async with client.stream("POST", "/chat/completions", json=payload, headers=headers) as response:
+                response.raise_for_status()
+                logger.info("OpenAI compatible streaming format call successful")
+
+                # 收集所有流式响应内容
+                full_content = ""
+                async for line in response.aiter_lines():
+                    if line.startswith("data: "):
+                        data = line[6:]  # Remove "data: " prefix
+                        if data.strip() == "[DONE]":
+                            break
+                        try:
+                            chunk_data = json.loads(data)
+                            if "choices" in chunk_data and chunk_data["choices"]:
+                                content = chunk_data["choices"][0].get("delta", {}).get("content", "")
+                                if content:
+                                    full_content += content
+                        except json.JSONDecodeError:
+                            continue
+
+                return full_content if full_content else "No response content"
+
+        except httpx.HTTPError as e:
+            logger.error(f"OpenAI compatible streaming format HTTP error: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"Response status code: {e.response.status_code}")
+                logger.error(f"Response content: {e.response.text}")
+        except Exception as e:
+            logger.error(f"OpenAI compatible streaming format call failed: {e}")
+            if logger.isEnabledFor(logging.DEBUG):
+                import traceback
+                logger.debug(f"Error traceback: {traceback.format_exc()}")
+
+        return None
     
     def should_use_tools(self, request: ChatCompletionRequest) -> bool:
         """
@@ -190,7 +248,7 @@ class LLMService:
                 return message.content
         return None
     
-    async def handle_unified_request(self, request: ChatCompletionRequest) -> str:
+    async def handle_unified_request(self, request: ChatCompletionRequest):
         """
         Unified request processing method, automatically identifies request type and calls appropriate processing logic
         """
@@ -228,7 +286,7 @@ class LLMService:
             prompt = "\n".join(conversation) + "\nAssistant: "
             logger.info(f"Processing regular request, final prompt length: {len(prompt)}")
         
-        return await self.call_llm(prompt, request.model)
+        return await self.call_llm(prompt, request.model, request.stream)
     
     # 保持向后兼容的方法
     async def handle_tool_call_request(self, request: ChatCompletionRequest) -> str:

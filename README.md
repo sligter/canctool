@@ -5,6 +5,7 @@
 ## 🚀 功能特性
 
 - ✅ **OpenAI API兼容**: 完全兼容OpenAI API的聊天补全接口
+- ✅ **智能流式输出**: 自适应的可靠流式响应，支持多语言无乱码
 - ✅ **工具调用支持**: 支持工具调用（tool calling）和工具结果处理
 - ✅ **多提供商支持**: 支持多个LLM提供商（OpenAI、Anthropic、本地LLM等）
 - ✅ **多模型配置**: 灵活的模型配置和动态模型列表
@@ -69,7 +70,52 @@ canctool
 canctool --host 0.0.0.0 --port 8001 --log-level info
 ```
 
-### 2. 配置多提供商
+### 2. 流式输出示例
+
+```python
+import requests
+import json
+
+# 非流式请求
+response = requests.post("http://localhost:8001/v1/chat/completions",
+    headers={"Content-Type": "application/json"},
+    json={
+        "model": "gpt-3.5-turbo",
+        "messages": [{"role": "user", "content": "Hello, how are you?"}],
+        "stream": False
+    }
+)
+print(response.json())
+
+# 流式请求
+response = requests.post("http://localhost:8001/v1/chat/completions",
+    headers={"Content-Type": "application/json"},
+    json={
+        "model": "gpt-3.5-turbo",
+        "messages": [{"role": "user", "content": "Tell me a story"}],
+        "stream": True
+    },
+    stream=True
+)
+
+for line in response.iter_lines():
+    if line:
+        line = line.decode('utf-8')
+        if line.startswith('data: '):
+            data = line[6:]  # Remove 'data: ' prefix
+            if data == '[DONE]':
+                break
+            try:
+                chunk = json.loads(data)
+                content = chunk['choices'][0]['delta'].get('content', '')
+                if content:
+                    print(content, end='', flush=True)
+            except json.JSONDecodeError:
+                continue
+print()  # New line at the end
+```
+
+### 3. 配置多提供商
 
 创建 `providers_config.json` 文件：
 
@@ -93,7 +139,7 @@ canctool --host 0.0.0.0 --port 8001 --log-level info
 }
 ```
 
-### 3. 设置环境变量
+### 4. 设置环境变量
 
 ```bash
 # 设置LLM提供商API密钥
@@ -110,7 +156,7 @@ export LLM_PROVIDERS_CONFIG_FILE="providers_config.json"
 export LOG_LEVEL="INFO"
 ```
 
-### 4. 代理服务认证
+### 5. 代理服务认证
 
 如果设置了 `SERVICE_API_KEY`，客户端需要在请求头中包含认证信息：
 
@@ -262,10 +308,48 @@ python test_client.py
 ## 🔌 API接口
 
 ### POST /v1/chat/completions
-兼容OpenAI API的聊天补全接口，支持工具调用。
+兼容OpenAI API的聊天补全接口，支持工具调用和流式输出。
 
 **认证**: 可选（如果设置了`SERVICE_API_KEY`）
 **Headers**: `Authorization: Bearer <your-api-key>`
+
+**支持的参数**:
+- `model`: 模型名称
+- `messages`: 消息列表
+- `temperature`: 温度参数 (0.0-2.0)
+- `max_tokens`: 最大token数
+- `tools`: 工具定义列表
+- `tool_choice`: 工具选择策略
+- `stream`: 是否启用流式输出 (true/false)
+
+**Token流式输出示例**:
+```bash
+curl -X POST http://localhost:8001/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-api-key" \
+  -d '{
+    "model": "gpt-3.5-turbo",
+    "messages": [{"role": "user", "content": "Tell me a story"}],
+    "stream": true
+  }'
+```
+
+**智能流式输出特性**:
+- 自适应流式模式：根据内容长度自动选择最佳方式
+- 多语言支持：完美支持中文、emoji、特殊字符，无乱码
+- 多种流式模式：单词级、句子级、字符级流式输出
+- 可靠稳定：避免复杂的token编码问题，确保输出正确性
+
+**流式响应格式**:
+```
+data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1677610602,"model":"gpt-3.5-turbo","choices":[{"index":0,"delta":{"role":"assistant","content":"Hello"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1677610602,"model":"gpt-3.5-turbo","choices":[{"index":0,"delta":{"content":" there!"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1677610602,"model":"gpt-3.5-turbo","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: [DONE]
+```
 
 ### GET /v1/models
 获取可用模型列表，返回OpenAI兼容的模型列表格式。

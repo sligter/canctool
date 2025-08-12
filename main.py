@@ -1,16 +1,18 @@
 from fastapi import FastAPI, HTTPException, Request, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import uvicorn
 import json
 import time
-from typing import Optional
+import asyncio
+from typing import Optional, AsyncGenerator
 
-from canctool.models import ChatCompletionRequest, ChatCompletionResponse
+from canctool.models import ChatCompletionRequest, ChatCompletionResponse, ChatCompletionStreamResponse
 from canctool.llm_service import LLMService
 from canctool.response_formatter import ResponseFormatter
 from canctool.config import Config
+from canctool.simple_streamer import SimpleStreamer
 
 # 设置日志
 Config.setup_logging()
@@ -119,13 +121,77 @@ llm_service = LLMService()
 response_formatter = ResponseFormatter()
 
 
-@app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
+async def stream_chat_completion(llm_service: LLMService, response_formatter: ResponseFormatter,
+                                request: ChatCompletionRequest) -> AsyncGenerator[str, None]:
+    """Generate streaming chat completion response using token-based streaming"""
+    try:
+        # 创建一个非流式请求来获取完整响应
+        non_stream_request = ChatCompletionRequest(
+            model=request.model,
+            messages=request.messages,
+            temperature=request.temperature,
+            max_tokens=request.max_tokens,
+            tools=request.tools,
+            tool_choice=request.tool_choice,
+            stream=False  # 强制非流式
+        )
+
+        # 获取完整响应
+        llm_response = await llm_service.handle_unified_request(non_stream_request)
+        content = str(llm_response)
+
+        if not content:
+            # 如果没有内容，发送空响应
+            empty_chunk = response_formatter.format_stream_chunk(request, "")
+            yield f"data: {empty_chunk.model_dump_json()}\n\n"
+        else:
+            # 使用SimpleStreamer进行可靠的流式输出
+            streamer = SimpleStreamer(delay=0.03)
+
+            # 根据内容长度选择流式模式
+            content_length = len(content)
+            if content_length < 50:
+                mode = "words"
+            elif content_length > 300:
+                mode = "sentences"
+            else:
+                mode = "words"
+
+            chunk_count = streamer.get_chunk_count(content, mode)
+            estimated_time = streamer.estimate_streaming_time(content, mode)
+
+            logger.info(f"Starting {mode}-based streaming: {chunk_count} chunks, ~{estimated_time:.1f}s")
+
+            # 流式输出
+            async for chunk_text in streamer.stream_adaptive(content, mode=mode):
+                if chunk_text.strip():  # 只发送非空chunk
+                    stream_chunk = response_formatter.format_stream_chunk(request, chunk_text)
+                    yield f"data: {stream_chunk.model_dump_json()}\n\n"
+
+        # 发送结束块
+        final_chunk = response_formatter.format_stream_end_chunk(request)
+        yield f"data: {final_chunk.model_dump_json()}\n\n"
+        yield "data: [DONE]\n\n"
+
+        logger.info("Streaming response completed successfully")
+
+    except Exception as e:
+        logger.error(f"Streaming error: {e}")
+        error_chunk = response_formatter.format_stream_chunk(request, f"Error: {str(e)}", "stop")
+        yield f"data: {error_chunk.model_dump_json()}\n\n"
+        yield "data: [DONE]\n\n"
+
+
+@app.post("/v1/chat/completions")
 async def chat_completions(request: ChatCompletionRequest, authenticated: bool = Depends(verify_api_key)):
     """
     兼容OpenAI API的聊天补全接口
     """
     try:
-        logger.info(f"Chat completion request: {request.model}, messages: {len(request.messages)}")
+        llm_service = LLMService()
+        response_formatter = ResponseFormatter()
+
+        logger.info(f"Chat completion request: {request.model}, messages: {len(request.messages)}, stream: {request.stream}")
 
         # Only log detailed information at DEBUG level
         if logger.isEnabledFor(logging.DEBUG):
@@ -141,14 +207,27 @@ async def chat_completions(request: ChatCompletionRequest, authenticated: bool =
                 if isinstance(msg.content, (list, dict)):
                     logger.debug(f"Message {i} content details: {msg.content}")
 
-        # Use unified request processing method
-        llm_response = await llm_service.handle_unified_request(request)
-        response = response_formatter.format_unified_response(
-            request, llm_response
-        )
+        # Handle streaming vs non-streaming requests
+        if request.stream:
+            logger.info("Processing streaming chat completion request")
+            return StreamingResponse(
+                stream_chat_completion(llm_service, response_formatter, request),
+                media_type="text/plain",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "Content-Type": "text/plain; charset=utf-8"
+                }
+            )
+        else:
+            # Use unified request processing method
+            llm_response = await llm_service.handle_unified_request(request)
+            response = response_formatter.format_unified_response(
+                request, llm_response
+            )
 
-        logger.info(f"Chat completion request successful: {response.id}")
-        return response
+            logger.info(f"Chat completion request successful: {response.id}")
+            return response
 
     except Exception as e:
         logger.error(f"Chat completion request failed: {e}")
