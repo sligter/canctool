@@ -1,0 +1,23 @@
+# Include the README and license files
+include README.md
+include LICENSE
+include MANIFEST.in
+
+# Include configuration files
+include providers_config.json
+include .env.example
+
+# Include package data
+recursive-include canctool *.py
+recursive-include canctool *.json
+
+# Exclude development and build files
+exclude .gitignore
+exclude .env
+exclude *.pyc
+exclude *.pyo
+exclude *~
+exclude .DS_Store
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * *~

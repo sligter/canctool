@@ -2,7 +2,7 @@ import json
 import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime
-from models import Tool, ChatMessage
+from .models import Tool, ChatMessage
 
 
 class PromptEngineeringService:
@@ -12,87 +12,87 @@ class PromptEngineeringService:
     
     def _create_tool_call_prompt_template(self) -> str:
         return """
-你是一个智能助手，必须优先调用工具来回答用户的问题。只有当工具调用无法满足用户需求时，才直接回答。
+You are an intelligent assistant that must prioritize using tools to answer user questions. Only provide direct answers when tool calls cannot satisfy the user's needs.
 
-可用工具：
+Available tools:
 {tools}
 
-工具调用格式说明：
-当需要调用工具时，你必须在回复中包含以下格式的工具调用信息：
+Tool calling format:
+When you need to call a tool, you must include the following format in your response:
 ```
-TOOL_CALL: {{"tool_name": "工具名称", "arguments": {{"参数名": "参数值"}}}}
+TOOL_CALL: {{"tool_name": "tool_name", "arguments": {{"parameter_name": "parameter_value"}}}}
 ```
 
-如果不需要调用任何工具，请直接回答用户的问题。
+If no tools are needed, please answer the user's question directly.
 
-参数说明：
-- tool_name: 必须是可用工具列表中的一个
-- arguments: 必须是符合工具定义的JSON对象，包含所有必需参数
+Parameter requirements:
+- tool_name: Must be one of the available tools from the list above
+- arguments: Must be a JSON object that conforms to the tool definition, including all required parameters
 
-当前对话：
+Current conversation:
 {conversation_history}
 
-用户最新消息：
+User's latest message:
 {user_message}
 
-请分析用户的需求，如果需要调用工具，请按上述格式返回工具调用信息。如果不需要调用工具，请直接回答。
+Please analyze the user's needs. If you need to call a tool, return the tool call information in the format above. If no tools are needed, answer directly.
 """
     
     def _tools_to_string(self, tools: List[Tool]) -> str:
         tools_str = ""
         for tool in tools:
             func = tool.function
-            tools_str += f"\n工具名称: {func.name}\n"
-            tools_str += f"描述: {func.description}\n"
-            tools_str += f"参数:\n"
-            
+            tools_str += f"\nTool name: {func.name}\n"
+            tools_str += f"Description: {func.description}\n"
+            tools_str += f"Parameters:\n"
+
             if func.parameters.properties:
                 for param_name, param_info in func.parameters.properties.items():
                     required = param_name in func.parameters.required
                     tools_str += f"  - {param_name} ({param_info.type})"
                     if required:
-                        tools_str += " (必需)"
+                        tools_str += " (required)"
                     else:
-                        tools_str += f" (可选, 默认值: {param_info.default})"
+                        tools_str += f" (optional, default: {param_info.default})"
                     if param_info.enum:
-                        tools_str += f", 可选值: {param_info.enum}"
-                    tools_str += f"\n    描述: {param_info.description}\n"
+                        tools_str += f", allowed values: {param_info.enum}"
+                    tools_str += f"\n    Description: {param_info.description}\n"
             else:
-                tools_str += "  无参数\n"
+                tools_str += "  No parameters\n"
             tools_str += "\n"
-        
+
         return tools_str
     
     def _format_conversation_history(self, messages: List[ChatMessage]) -> str:
         conversation = []
-        
-        # 从最近的对话开始构建，保持优先级但保留完整信息
+
+        # Build conversation from most recent messages, maintaining priority but preserving complete information
         for msg in reversed(messages):
             content = self._ensure_string_content(msg.content)
-            
+
             if msg.role == "user":
-                line = f"用户: {content}"
+                line = f"User: {content}"
             elif msg.role == "assistant":
                 if msg.tool_calls:
-                    # 保留完整的工具调用信息
+                    # Preserve complete tool call information
                     tool_calls_info = []
                     for tool_call in msg.tool_calls:
                         tool_name = tool_call['function']['name']
                         tool_args = tool_call['function']['arguments']
-                        tool_calls_info.append(f"调用工具 {tool_name} 参数 {tool_args}")
-                    line = f"助手: {'; '.join(tool_calls_info)}"
+                        tool_calls_info.append(f"Called tool {tool_name} with arguments {tool_args}")
+                    line = f"Assistant: {'; '.join(tool_calls_info)}"
                 elif msg.content:
-                    line = f"助手: {content}"
+                    line = f"Assistant: {content}"
                 else:
-                    continue  # 跳过空消息
+                    continue  # Skip empty messages
             elif msg.role == "tool":
-                # 保留完整的工具结果信息
-                line = f"工具结果: {content}"
+                # Preserve complete tool result information
+                line = f"Tool result: {content}"
             else:
-                continue  # 跳过其他角色
-            
-            conversation.insert(0, line)  # 插入到开头以保持顺序
-        
+                continue  # Skip other roles
+
+            conversation.insert(0, line)  # Insert at beginning to maintain order
+
         return "\n".join(conversation)
     
     def _ensure_string_content(self, content) -> str:
@@ -126,60 +126,60 @@ TOOL_CALL: {{"tool_name": "工具名称", "arguments": {{"参数名": "参数值
     
     def build_unified_tool_prompt(self, messages: List[ChatMessage], tools: Optional[List[Tool]] = None, tool_result: Optional[str] = None) -> str:
         """
-        统一的工具调用提示词构建方法，支持初始调用和工具结果处理
+        Unified tool call prompt building method, supporting initial calls and tool result processing
         """
-        # 获取最新的用户消息
+        # Get the latest user message
         user_message = self._ensure_string_content(messages[-1].content)
-        
-        # 构建对话历史（排除最后一条用户消息）
+
+        # Build conversation history (excluding the last user message)
         conversation_history = self._format_conversation_history(messages[:-1])
-        
-        # 构建工具信息
+
+        # Build tool information
         tools_info = ""
         if tools:
             tools_info = f"""
-可用工具：
+Available tools:
 {self._tools_to_string(tools)}
 
-工具调用格式说明：
-当需要调用工具时，你必须在回复中包含以下格式的工具调用信息：
+Tool calling format:
+When you need to call a tool, you must include the following format in your response:
 ```
-TOOL_CALL: {{"tool_name": "工具名称", "arguments": {{"参数名": "参数值"}}}}
+TOOL_CALL: {{"tool_name": "tool_name", "arguments": {{"parameter_name": "parameter_value"}}}}
 ```
 
-参数说明：
-- tool_name: 必须是可用工具列表中的一个
-- arguments: 必须是符合工具定义的JSON对象，包含所有必需参数
+Parameter requirements:
+- tool_name: Must be one of the available tools from the list above
+- arguments: Must be a JSON object that conforms to the tool definition, including all required parameters
 """
-        
-        # 构建工具结果信息（如果有）
+
+        # Build tool result information (if any)
         tool_result_info = ""
         if tool_result:
             tool_result_info = f"""
-上一个工具调用结果：
+Previous tool call result:
 {self._ensure_string_content(tool_result)}
 
-请根据以上结果决定是否需要调用更多工具或直接回答用户问题。
+Based on the above result, please decide whether you need to call more tools or answer the user's question directly.
 """
-        
-        # 统一的提示词模板
-        unified_prompt = f"""你是一个智能助手，必须优先调用工具来回答用户的问题。只有当工具调用无法满足用户需求时，才直接回答。
+
+        # Unified prompt template
+        unified_prompt = f"""You are an intelligent assistant that must prioritize using tools to answer user questions. Only provide direct answers when tool calls cannot satisfy the user's needs.
 
 {tools_info}
 {tool_result_info}
-当前对话：
+Current conversation:
 {conversation_history}
 
-用户最新消息：
+User's latest message:
 {user_message}
 
-请分析用户的需求，如果需要调用工具，请按上述格式返回工具调用信息。如果不需要调用工具，请直接回答。"""
-        
-        # 记录提示词长度用于调试
+Please analyze the user's needs. If you need to call a tool, return the tool call information in the format above. If no tools are needed, answer directly."""
+
+        # Log prompt length for debugging
         import logging
         logger = logging.getLogger(__name__)
-        logger.info(f"构建的统一提示词长度: {len(unified_prompt)}")
-        
+        logger.info(f"Built unified prompt length: {len(unified_prompt)}")
+
         return unified_prompt
     
     # 保持向后兼容的方法

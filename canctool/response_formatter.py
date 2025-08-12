@@ -2,8 +2,8 @@ import json
 import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional
-from models import ChatCompletionRequest, ChatCompletionResponse, ToolCall, Choice, Usage, ChatMessage
-from prompt_engineering import PromptEngineeringService
+from .models import ChatCompletionRequest, ChatCompletionResponse, ToolCall, Choice, Usage, ChatMessage
+from .prompt_engineering import PromptEngineeringService
 
 
 class ResponseFormatter:
