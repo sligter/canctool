@@ -12,7 +12,7 @@ class PromptEngineeringService:
     
     def _create_tool_call_prompt_template(self) -> str:
         return """
-你是一个智能助手，可以调用工具来帮助用户完成任务。当用户的问题需要使用工具时，你需要以特定的格式返回工具调用信息。
+你是一个智能助手，必须优先调用工具来回答用户的问题。只有当工具调用无法满足用户需求时，才直接回答。
 
 可用工具：
 {tools}
@@ -65,35 +65,76 @@ TOOL_CALL: {{"tool_name": "工具名称", "arguments": {{"参数名": "参数值
     
     def _format_conversation_history(self, messages: List[ChatMessage]) -> str:
         conversation = []
-        for msg in messages:
+        
+        # 从最近的对话开始构建，保持优先级但保留完整信息
+        for msg in reversed(messages):
+            content = self._ensure_string_content(msg.content)
+            
             if msg.role == "user":
-                conversation.append(f"用户: {msg.content}")
+                line = f"用户: {content}"
             elif msg.role == "assistant":
                 if msg.tool_calls:
+                    # 保留完整的工具调用信息
+                    tool_calls_info = []
                     for tool_call in msg.tool_calls:
-                        conversation.append(f"助手: 调用工具 {tool_call['function']['name']} 参数 {tool_call['function']['arguments']}")
+                        tool_name = tool_call['function']['name']
+                        tool_args = tool_call['function']['arguments']
+                        tool_calls_info.append(f"调用工具 {tool_name} 参数 {tool_args}")
+                    line = f"助手: {'; '.join(tool_calls_info)}"
                 elif msg.content:
-                    conversation.append(f"助手: {msg.content}")
+                    line = f"助手: {content}"
+                else:
+                    continue  # 跳过空消息
             elif msg.role == "tool":
-                conversation.append(f"工具结果: {msg.content}")
+                # 保留完整的工具结果信息
+                line = f"工具结果: {content}"
+            else:
+                continue  # 跳过其他角色
+            
+            conversation.insert(0, line)  # 插入到开头以保持顺序
         
         return "\n".join(conversation)
     
-    def build_tool_call_prompt(self, messages: List[ChatMessage], tools: List[Tool]) -> str:
-        user_message = messages[-1].content
-        conversation_history = self._format_conversation_history(messages[:-1])
-        tools_str = self._tools_to_string(tools)
+    def _ensure_string_content(self, content) -> str:
+        """确保内容是字符串类型"""
+        if content is None:
+            return ""
         
-        return self.tool_call_prompt.format(
-            tools=tools_str,
-            conversation_history=conversation_history,
-            user_message=user_message
-        )
+        if isinstance(content, str):
+            return content
+        
+        # 如果是复杂对象，尝试提取文本内容
+        if isinstance(content, list):
+            text_parts = []
+            for item in content:
+                if isinstance(item, dict) and "text" in item:
+                    text_parts.append(item["text"])
+                elif isinstance(item, str):
+                    text_parts.append(item)
+                else:
+                    text_parts.append(str(item))
+            return "\n".join(text_parts)
+        
+        if isinstance(content, dict):
+            if "text" in content:
+                return content["text"]
+            # 尝试将dict转换为字符串
+            return str(content)
+        
+        # 其他类型直接转换为字符串
+        return str(content)
     
-    def build_tool_result_prompt(self, messages: List[ChatMessage], tool_result: str, tool_call_id: str, tools: Optional[List[Tool]] = None) -> str:
+    def build_unified_tool_prompt(self, messages: List[ChatMessage], tools: Optional[List[Tool]] = None, tool_result: Optional[str] = None) -> str:
         """
-        构建工具结果处理提示词，支持在处理工具结果后可能还需要调用其他工具的情况
+        统一的工具调用提示词构建方法，支持初始调用和工具结果处理
         """
+        # 获取最新的用户消息
+        user_message = self._ensure_string_content(messages[-1].content)
+        
+        # 构建对话历史（排除最后一条用户消息）
+        conversation_history = self._format_conversation_history(messages[:-1])
+        
+        # 构建工具信息
         tools_info = ""
         if tools:
             tools_info = f"""
@@ -109,25 +150,44 @@ TOOL_CALL: {{"tool_name": "工具名称", "arguments": {{"参数名": "参数值
 参数说明：
 - tool_name: 必须是可用工具列表中的一个
 - arguments: 必须是符合工具定义的JSON对象，包含所有必需参数
-
-如果需要调用更多工具，请按上述格式返回工具调用信息。如果不需要调用工具，请直接回答用户的问题。
-"""
-        else:
-            tools_info = """
-如果需要更多信息或其他工具调用，请直接说明。
 """
         
-        return f"""
-工具调用已完成。
+        # 构建工具结果信息（如果有）
+        tool_result_info = ""
+        if tool_result:
+            tool_result_info = f"""
+上一个工具调用结果：
+{self._ensure_string_content(tool_result)}
 
-工具结果:
-{tool_result}
-
-对话历史:
-{self._format_conversation_history(messages)}
-
-请根据工具结果继续回答用户的问题。{tools_info}
+请根据以上结果决定是否需要调用更多工具或直接回答用户问题。
 """
+        
+        # 统一的提示词模板
+        unified_prompt = f"""你是一个智能助手，必须优先调用工具来回答用户的问题。只有当工具调用无法满足用户需求时，才直接回答。
+
+{tools_info}
+{tool_result_info}
+当前对话：
+{conversation_history}
+
+用户最新消息：
+{user_message}
+
+请分析用户的需求，如果需要调用工具，请按上述格式返回工具调用信息。如果不需要调用工具，请直接回答。"""
+        
+        # 记录提示词长度用于调试
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"构建的统一提示词长度: {len(unified_prompt)}")
+        
+        return unified_prompt
+    
+    # 保持向后兼容的方法
+    def build_tool_call_prompt(self, messages: List[ChatMessage], tools: List[Tool]) -> str:
+        return self.build_unified_tool_prompt(messages, tools)
+    
+    def build_tool_result_prompt(self, messages: List[ChatMessage], tool_result: str, tool_call_id: str, tools: Optional[List[Tool]] = None) -> str:
+        return self.build_unified_tool_prompt(messages, tools, tool_result)
     
     def parse_tool_call(self, llm_response: str) -> Optional[Dict[str, Any]]:
         pattern = r'TOOL_CALL:\s*(\{.*\})'
