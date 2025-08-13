@@ -56,7 +56,7 @@
 
 ```bash
 
-git clone https://github.com/canctool/canctool.git
+git clone https://github.com/sligter/canctool.git
 cd canctool
 uv sync
 
@@ -295,5 +295,4 @@ curl http://localhost:8001/v1/models
 ## 📞 支持
 
 如有问题，请通过以下方式联系：
-- 提交 [GitHub Issue](https://github.com/canctool/canctool/issues)
-- 查看 [文档](https://github.com/canctool/canctool/wiki)
+- 提交 [GitHub Issue](https://github.com/sligter/canctool/issues)

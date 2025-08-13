@@ -55,7 +55,7 @@ Create `providers_config.json` file:
 #### Option 1: Run from Source
 
 ```bash
-git clone https://github.com/canctool/canctool.git
+git clone https://github.com/sligter/canctool.git
 cd canctool
 uv sync
 
@@ -294,5 +294,4 @@ Issues and Pull Requests are welcome!
 ## 📞 Support
 
 For questions, please contact us through:
-- Submit [GitHub Issue](https://github.com/canctool/canctool/issues)
-- Check [Documentation](https://github.com/canctool/canctool/wiki)
+- Submit [GitHub Issue](https://github.com/sligter/canctool/issues)
