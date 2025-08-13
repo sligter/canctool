@@ -106,7 +106,7 @@ class TokenStreamer:
                     continue
             return result
     
-    async def stream_tokens(self, text: str, delay: float = 0.01) -> AsyncGenerator[str, None]:
+    async def stream_tokens(self, text: str, delay: float = 0.03) -> AsyncGenerator[str, None]:
         """Stream text using word-based chunking (more reliable than token-based)"""
         if not text:
             return
@@ -130,7 +130,7 @@ class TokenStreamer:
                 await asyncio.sleep(delay * 0.5)  # 空白字符延迟减半
     
     async def stream_tokens_chunked(self, text: str, chunk_size: int = 3,
-                                   delay: float = 0.01) -> AsyncGenerator[str, None]:
+                                   delay: float = 0.03) -> AsyncGenerator[str, None]:
         """Stream text in character-based chunks (more reliable)"""
         if not text:
             return

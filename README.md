@@ -1,36 +1,27 @@
 # CancTool - LLM Tool Call Wrapper Service
 
-一个通过提示词工程让不支持OpenAI工具调用的LLM能够模拟标准OpenAI工具调用响应的服务，支持多提供商和多模型配置。
+**Language / 语言**: [English](README.md) | [中文](README_ZH.md)
 
-## 🚀 功能特性
+A service that enables LLMs without native OpenAI tool calling support to simulate standard OpenAI tool calling responses through prompt engineering, supporting multiple providers and model configurations.
 
-- ✅ **OpenAI API兼容**: 完全兼容OpenAI API的聊天补全接口
-- ✅ **工具调用支持**: 支持工具调用（tool calling）和工具结果处理
-- ✅ **多提供商支持**: 支持多个LLM提供商（OpenAI、Anthropic、本地LLM等）
-- ✅ **JSON配置**: 灵活的JSON配置文件，支持多模型和多提供商
-- ✅ **完整错误处理**: 完整的错误处理和优化的日志记录
+## 🚀 Features
 
-## 📦 安装
+- ✅ **OpenAI API Compatible**: Fully compatible with OpenAI API chat completion interface
+- ✅ **Tool Calling Support**: Supports tool calling and tool result processing
+- ✅ **Multi-Provider Support**: Supports multiple LLM providers (OpenAI, Anthropic, local LLMs, etc.)
+- ✅ **JSON Configuration**: Flexible JSON configuration files supporting multiple models and providers
+- ✅ **Complete Error Handling**: Comprehensive error handling and optimized logging
 
-### 系统要求
+## 📦 Installation
+
+### System Requirements
 - Python >= 3.8.1
 
-### 安装方式
+## 🚀 Quick Start
 
-```bash
-# 从源码安装
-git clone https://github.com/canctool/canctool.git
-cd canctool
-uv sync
+### 1. Configure Service
 
-uv run main.py
-```
-
-## 🚀 快速开始
-
-### 1. 配置服务
-
-创建 `providers_config.json` 文件：
+Create `providers_config.json` file:
 
 ```json
 {
@@ -59,9 +50,22 @@ uv run main.py
 }
 ```
 
-### 2. 启动服务
+### 2. Start Service
+
+#### Option 1: Run from Source
 
 ```bash
+git clone https://github.com/canctool/canctool.git
+cd canctool
+uv sync
+
+uv run main.py
+```
+
+#### Option 2: Docker Deployment
+
+```bash
+# Use pre-built image
 docker run -d --name canctool-service \
   -p 8001:8001 \
   -v "${PWD}/providers_config.json:/app/providers_config.json:ro" \
@@ -70,13 +74,30 @@ docker run -d --name canctool-service \
   bradleylzh/canctool:latest
 ```
 
-### 3. 流式输出示例
+Or build from source:
+
+```bash
+# Build image
+docker build -t canctool .
+
+# Start service
+docker run -d --name canctool-service \
+  -p 8001:8001 \
+  -v "${PWD}/providers_config.json:/app/providers_config.json:ro" \
+  -e LOG_LEVEL=INFO \
+  --restart unless-stopped \
+  canctool
+```
+
+### 3. Usage Examples
+
+#### Non-streaming Request
 
 ```python
 import requests
 import json
 
-# 非流式请求
+# Non-streaming request
 response = requests.post("http://localhost:8001/v1/chat/completions",
     headers={"Content-Type": "application/json"},
     json={
@@ -86,8 +107,12 @@ response = requests.post("http://localhost:8001/v1/chat/completions",
     }
 )
 print(response.json())
+```
 
-# 流式请求
+#### Streaming Request
+
+```python
+# Streaming request
 response = requests.post("http://localhost:8001/v1/chat/completions",
     headers={"Content-Type": "application/json"},
     json={
@@ -115,54 +140,56 @@ for line in response.iter_lines():
 print()  # New line at the end
 ```
 
+## 🏗️ Core Components
 
-## 🏗️ 核心组件
+| Component | Description |
+|-----------|-------------|
+| **canctool/models.py** | OpenAI API compatible data models |
+| **canctool/config.py** | JSON configuration file management and multi-provider support |
+| **canctool/prompt_engineering.py** | Intelligent prompt engineering and tool calling templates |
+| **canctool/llm_service.py** | Multi-provider LLM communication interface |
+| **canctool/response_formatter.py** | Standard OpenAI format response generation |
+| **canctool/token_streamer.py** | Intelligent streaming output and token calculation |
+| **main.py** | FastAPI application entry point |
 
-- **canctool/models.py** - OpenAI API兼容的数据模型
-- **canctool/config.py** - JSON配置文件管理和多提供商支持
-- **canctool/prompt_engineering.py** - 智能提示词工程和工具调用模板
-- **canctool/llm_service.py** - 多提供商LLM通信接口
-- **canctool/response_formatter.py** - 标准OpenAI格式响应生成
-- **canctool/token_streamer.py** - 智能流式输出和token计算
-- **main.py** - FastAPI应用入口
-
-## 🔌 API接口
+## 🔌 API Endpoints
 
 ### POST /v1/chat/completions
-兼容OpenAI API的聊天补全接口，支持工具调用和流式输出。
+OpenAI API compatible chat completion endpoint supporting tool calling and streaming output.
 
-**支持的参数**:
-- `model`: 模型名称
-- `messages`: 消息列表
-- `temperature`: 温度参数 (0.0-2.0)
-- `max_tokens`: 最大token数
-- `tools`: 工具定义列表
-- `tool_choice`: 工具选择策略
-- `stream`: 是否启用流式输出 (true/false)
+**Supported Parameters**:
+- `model`: Model name
+- `messages`: Message list
+- `temperature`: Temperature parameter (0.0-2.0)
+- `max_tokens`: Maximum token count
+- `tools`: Tool definition list
+- `tool_choice`: Tool selection strategy
+- `stream`: Enable streaming output (true/false)
 
 ### GET /v1/models
-获取可用模型列表，返回配置文件中默认提供商的模型列表。
+Get available model list, returns models from the default provider in configuration file.
 
 ### GET /health
-健康检查接口，返回服务状态。
+Health check endpoint, returns service status.
 
-## 📋 使用示例
+## 📋 Usage Examples
 
-### 工具调用示例
+### Tool Calling Example
+
 ```json
 {
   "model": "gpt-3.5-turbo",
-  "messages": [{"role": "user", "content": "现在北京时间是几点？"}],
+  "messages": [{"role": "user", "content": "What time is it in Beijing now?"}],
   "tools": [
     {
       "type": "function",
       "function": {
         "name": "get_current_time",
-        "description": "获取指定时区的当前时间",
+        "description": "Get current time for specified timezone",
         "parameters": {
           "type": "object",
           "properties": {
-            "timezone": {"type": "string", "description": "时区名称"}
+            "timezone": {"type": "string", "description": "Timezone name"}
           }
         }
       }
@@ -171,22 +198,23 @@ print()  # New line at the end
 }
 ```
 
-### 流式输出示例
+### Streaming Output Example
+
 ```bash
 curl -X POST http://localhost:8001/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "gpt-3.5-turbo",
-    "messages": [{"role": "user", "content": "讲个故事"}],
+    "messages": [{"role": "user", "content": "Tell me a story"}],
     "stream": true
   }'
 ```
 
-## ⚙️ 配置说明
+## ⚙️ Configuration Guide
 
-### JSON配置文件
+### JSON Configuration File
 
-创建 `providers_config.json` 文件来配置多提供商：
+Create `providers_config.json` file to configure multiple providers:
 
 ```json
 {
@@ -214,51 +242,57 @@ curl -X POST http://localhost:8001/v1/chat/completions \
 }
 ```
 
-### 环境变量
+## 🔧 Feature Details
 
-| 变量名 | 描述 | 默认值 |
-|--------|------|--------|
-| `OPENAI_API_KEY` | OpenAI API密钥 | None |
-| `ANTHROPIC_API_KEY` | Anthropic API密钥 | None |
-| `SERVICE_API_KEY` | 服务API密钥（可选） | None |
-| `LOG_LEVEL` | 日志级别 | INFO |
+### Tool Calling Support
+- Automatic tool calling request detection
+- Intelligent prompt engineering for improved tool calling success rates
+- Support for tool result processing and final answer generation
+- Fully compatible with OpenAI tool calling format
 
-## 🔧 特性说明
+### Multi-Provider Architecture
+- Flexible JSON configuration files
+- Support for multiple LLM providers simultaneously
+- Intelligent model routing and provider selection
+- Environment variable support for easy deployment
 
-### 工具调用支持
-- 自动识别工具调用请求
-- 智能提示词工程，提高工具调用成功率
-- 支持工具结果处理和最终回答生成
-- 完全兼容OpenAI工具调用格式
+## 🔧 Troubleshooting
 
-### 多提供商架构
-- 灵活的JSON配置文件
-- 支持多个LLM提供商同时配置
-- 智能模型路由和提供商选择
-- 环境变量支持，便于部署
+### Common Issues
 
-## 🔧 故障排除
+#### 1. LLM API Connection Failed
+- Check `base_url` in `providers_config.json`
+- Confirm LLM service is running
+- Check network connectivity
 
-### 常见问题
+#### 2. API Key Error
+- Check API key in environment variables
+- Confirm API key is valid and has sufficient permissions
 
-1. **LLM API连接失败**
-   - 检查 `providers_config.json` 中的 `base_url`
-   - 确认LLM服务正在运行
-   - 检查网络连接
+#### 3. Model Unavailable
+- Check model list returned by `/v1/models` endpoint
+- Confirm requested model exists in configuration file
 
-2. **API密钥错误**
-   - 检查环境变量中的API密钥
-   - 确认API密钥有效且有足够权限
-
-3. **模型不可用**
-   - 检查 `/v1/models` 端点返回的模型列表
-   - 确认请求的模型在配置文件中存在
-
-
-### 测试连接
+### Test Connection
 
 ```bash
-# 测试API端点
+# Test API endpoints
 curl http://localhost:8001/health
 curl http://localhost:8001/v1/models
 ```
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🤝 Contributing
+
+Issues and Pull Requests are welcome!
+
+## 📞 Support
+
+For questions, please contact us through:
+- Submit [GitHub Issue](https://github.com/canctool/canctool/issues)
+- Check [Documentation](https://github.com/canctool/canctool/wiki)
