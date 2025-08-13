@@ -31,39 +31,47 @@ class ProviderConfig:
 class Config:
     """增强的配置管理类，支持多提供商和多模型"""
 
-    # 服务配置
-    SERVICE_API_KEY: Optional[str] = os.getenv("SERVICE_API_KEY")  # 代理服务自身的API密钥
-
-    # 请求配置
-    REQUEST_TIMEOUT: int = int(os.getenv("REQUEST_TIMEOUT", "30"))
-    MAX_RETRIES: int = int(os.getenv("MAX_RETRIES", "3"))
-
-    # 日志配置
-    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+    # 服务配置（默认值，可被 JSON 配置覆盖）
+    SERVICE_API_KEY: Optional[str] = None
+    REQUEST_TIMEOUT: int = 30
+    MAX_RETRIES: int = 3
+    LOG_LEVEL: str = "INFO"
+    MAX_PROMPT_LENGTH: int = 200000
 
     # 提供商配置
     _providers: Dict[str, ProviderConfig] = {}
     _default_provider: Optional[str] = None
     _model_provider_mapping: Dict[str, str] = {}  # model_name -> provider_name
+    _config_loaded: bool = False
     
     @classmethod
     def setup_logging(cls):
         """设置日志配置"""
+        # 确保配置已加载
+        if not cls._config_loaded:
+            cls.load_providers_config()
+
         level = getattr(logging, cls.LOG_LEVEL.upper())
         logging.basicConfig(
             level=level,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
         )
 
+
+
     @classmethod
     def load_providers_config(cls):
         """加载提供商配置"""
+        if cls._config_loaded:
+            return
+
         # 首先尝试从环境变量加载JSON配置
         providers_json = os.getenv("LLM_PROVIDERS_CONFIG")
         if providers_json:
             try:
                 providers_data = json.loads(providers_json)
                 cls._load_providers_from_dict(providers_data)
+                cls._config_loaded = True
                 return
             except json.JSONDecodeError as e:
                 logging.warning(f"Unable to parse LLM_PROVIDERS_CONFIG JSON: {e}")
@@ -75,18 +83,24 @@ class Config:
                 with open(config_file, 'r', encoding='utf-8') as f:
                     providers_data = json.load(f)
                 cls._load_providers_from_dict(providers_data)
+                cls._config_loaded = True
                 return
             except (json.JSONDecodeError, IOError) as e:
                 logging.warning(f"Unable to load configuration file {config_file}: {e}")
 
         # Fall back to environment variable configuration (backward compatibility)
         cls._load_legacy_config()
+        cls._config_loaded = True
 
     @classmethod
     def _load_providers_from_dict(cls, providers_data: Dict[str, Any]):
         """Load provider configuration from dictionary data"""
         cls._providers.clear()
         cls._model_provider_mapping.clear()
+
+        # 加载服务配置
+        service_config = providers_data.get("service_config", {})
+        cls._load_service_config(service_config)
 
         default_provider = providers_data.get("default_provider")
         providers = providers_data.get("providers", {})
@@ -110,6 +124,16 @@ class Config:
             cls._default_provider = default_provider
         elif cls._providers:
             cls._default_provider = next(iter(cls._providers.keys()))
+
+    @classmethod
+    def _load_service_config(cls, service_config: Dict[str, Any]):
+        """从 service_config 部分加载服务配置"""
+        # 直接从 JSON 配置加载，不再使用环境变量
+        cls.SERVICE_API_KEY = service_config.get("service_api_key")
+        cls.REQUEST_TIMEOUT = int(service_config.get("request_timeout", cls.REQUEST_TIMEOUT))
+        cls.MAX_RETRIES = int(service_config.get("max_retries", cls.MAX_RETRIES))
+        cls.LOG_LEVEL = service_config.get("log_level", cls.LOG_LEVEL)
+        cls.MAX_PROMPT_LENGTH = int(service_config.get("max_prompt_length", cls.MAX_PROMPT_LENGTH))
 
     @classmethod
     def _load_legacy_config(cls):

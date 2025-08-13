@@ -11,7 +11,7 @@
 - ✅ **多模型配置**: 灵活的模型配置和动态模型列表
 - ✅ **API密钥认证**: 内置API密钥认证机制
 - ✅ **配置化模型列表**: `/v1/models`端点返回可配置的模型列表
-- ✅ **智能提示词工程**: 基于提示词工程的工具调用模拟
+- ✅ **智能提示词工程**: 中文提示词，长度控制（200K上限），自动删减历史消息
 - ✅ **自动请求识别**: 自动识别请求类型并相应处理
 - ✅ **完整错误处理**: 完整的错误处理和优化的日志记录
 - ✅ **重试机制**: 内置重试机制和超时控制
@@ -526,6 +526,7 @@ export DEFAULT_MODEL_NAME="default"
 |--------|------|--------|
 | `SERVICE_API_KEY` | 服务API密钥（可选） | None |
 | `LLM_PROVIDERS_CONFIG` | JSON格式的提供商配置 | None |
+| `MAX_PROMPT_LENGTH` | 最大提示词长度（字符） | 200000 |
 | `LLM_PROVIDERS_CONFIG_FILE` | 配置文件路径 | providers_config.json |
 | `REQUEST_TIMEOUT` | 请求超时时间（秒） | 30 |
 | `MAX_RETRIES` | 最大重试次数 | 3 |

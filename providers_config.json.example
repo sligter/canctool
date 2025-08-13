@@ -1,9 +1,16 @@
 {
   "default_provider": "openai",
+  "service_config": {
+    "log_level": "INFO",
+    "request_timeout": 30,
+    "max_retries": 3,
+    "max_prompt_length": 200000,
+    "service_api_key": null
+  },
   "providers": {
     "openai": {
       "base_url": "https://api.openai.com/v1",
-      "api_key": "${OPENAI_API_KEY}",
+      "api_key": "your-openai-api-key-here",
       "models": [
         "gpt-4",
         "gpt-4-turbo",
@@ -16,7 +23,7 @@
     },
     "anthropic": {
       "base_url": "https://api.anthropic.com/v1",
-      "api_key": "${ANTHROPIC_API_KEY}",
+      "api_key": "your-anthropic-api-key-here",
       "models": [
         "claude-3-opus-20240229",
         "claude-3-sonnet-20240229",
@@ -40,7 +47,7 @@
     },
     "azure_openai": {
       "base_url": "https://your-resource.openai.azure.com",
-      "api_key": "${AZURE_OPENAI_API_KEY}",
+      "api_key": "your-azure-openai-api-key-here",
       "models": [
         "gpt-4-azure",
         "gpt-35-turbo-azure"

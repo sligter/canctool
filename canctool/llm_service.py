@@ -116,7 +116,7 @@ class LLMService:
                 "messages": [
                     {"role": "user", "content": prompt}
                 ],
-                "max_tokens": 1000,
+                # "max_tokens": 1000,
                 "temperature": 0.7
             }
 
@@ -162,7 +162,7 @@ class LLMService:
                 "messages": [
                     {"role": "user", "content": prompt}
                 ],
-                "max_tokens": 1000,
+                # "max_tokens": 1000,
                 "temperature": 0.7,
                 "stream": True
             }
