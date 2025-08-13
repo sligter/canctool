@@ -169,3 +169,27 @@ class TokenStreamer:
             "tiktoken_available": self.is_tiktoken_available(),
             "encoding_name": getattr(self.encoding, 'name', None) if self.encoding else None
         }
+
+    def calculate_messages_tokens(self, messages: list) -> int:
+        """Calculate token count for a list of chat messages"""
+        total_text = ""
+
+        for message in messages:
+            # Add role prefix (approximate token cost)
+            role = getattr(message, 'role', 'user')
+            total_text += f"<{role}>"
+
+            # Extract content
+            content = getattr(message, 'content', '')
+            if isinstance(content, str):
+                total_text += content
+            elif isinstance(content, list):
+                # Handle multimodal content
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "text":
+                        total_text += item.get("text", "")
+
+            # Add message separator
+            total_text += "\n"
+
+        return self.get_token_count(total_text)

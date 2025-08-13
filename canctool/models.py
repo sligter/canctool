@@ -84,3 +84,4 @@ class ChatCompletionStreamResponse(BaseModel):
     created: int
     model: str
     choices: List[StreamChoice]
+    usage: Optional[Usage] = None

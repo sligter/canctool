@@ -121,8 +121,10 @@ class ResponseFormatter:
 
         return response
 
-    def format_stream_end_chunk(self, request: ChatCompletionRequest) -> ChatCompletionStreamResponse:
-        """Format final streaming chunk"""
+    def format_stream_end_chunk(self, request: ChatCompletionRequest,
+                               prompt_tokens: int = 0,
+                               completion_tokens: int = 0) -> ChatCompletionStreamResponse:
+        """Format final streaming chunk with token usage information"""
         response_id = f"chatcmpl-{uuid.uuid4().hex[:29]}"
 
         # Empty delta for final chunk
@@ -134,11 +136,19 @@ class ResponseFormatter:
             finish_reason="stop"
         )
 
+        # Include usage information in the final chunk
+        usage = Usage(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens
+        )
+
         response = ChatCompletionStreamResponse(
             id=response_id,
             created=int(time.time()),
             model=request.model,
-            choices=[choice]
+            choices=[choice],
+            usage=usage
         )
 
         return response

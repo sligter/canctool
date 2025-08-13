@@ -13,6 +13,7 @@ from canctool.llm_service import LLMService
 from canctool.response_formatter import ResponseFormatter
 from canctool.config import Config
 from canctool.simple_streamer import SimpleStreamer
+from canctool.token_streamer import TokenStreamer
 
 # 设置日志
 Config.setup_logging()
@@ -140,6 +141,15 @@ async def stream_chat_completion(llm_service: LLMService, response_formatter: Re
         llm_response = await llm_service.handle_unified_request(non_stream_request)
         content = str(llm_response)
 
+        # 初始化TokenStreamer用于计算token数量
+        token_streamer = TokenStreamer(model_name=request.model)
+
+        # 计算prompt tokens和completion tokens
+        prompt_tokens = token_streamer.calculate_messages_tokens(request.messages)
+        completion_tokens = token_streamer.get_token_count(content) if content else 0
+
+        logger.info(f"Token usage - Prompt: {prompt_tokens}, Completion: {completion_tokens}, Total: {prompt_tokens + completion_tokens}")
+
         if not content:
             # 如果没有内容，发送空响应
             empty_chunk = response_formatter.format_stream_chunk(request, "")
@@ -168,8 +178,12 @@ async def stream_chat_completion(llm_service: LLMService, response_formatter: Re
                     stream_chunk = response_formatter.format_stream_chunk(request, chunk_text)
                     yield f"data: {stream_chunk.model_dump_json()}\n\n"
 
-        # 发送结束块
-        final_chunk = response_formatter.format_stream_end_chunk(request)
+        # 发送结束块，包含token使用信息
+        final_chunk = response_formatter.format_stream_end_chunk(
+            request,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens
+        )
         yield f"data: {final_chunk.model_dump_json()}\n\n"
         yield "data: [DONE]\n\n"
 
