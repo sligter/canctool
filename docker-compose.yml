@@ -7,16 +7,9 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8001:8001"
-    environment:
-      # 配置文件路径（指定 JSON 配置文件位置）
-      - LLM_PROVIDERS_CONFIG_FILE=providers_config.json
     volumes:
       # 挂载主配置文件（必需）
-      # 选择以下其中一个配置文件：
       - ./providers_config.json:/app/providers_config.json:ro          # 使用自定义配置
-      # - ./providers_config.docker.json:/app/providers_config.json:ro  # 使用 Docker 优化配置
-      # - ./providers_config.json.example:/app/providers_config.json:ro # 使用示例配置
-
       # 可选：挂载日志目录
       # - ./logs:/app/logs
     restart: unless-stopped
